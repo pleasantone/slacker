@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import time
 
 import requests
 
@@ -50,11 +51,12 @@ class Response(object):
 
 class BaseAPI(object):
     def __init__(self, token=None, timeout=DEFAULT_TIMEOUT, proxies=None,
-                 session=None):
+                 session=None, retry_rate_limit=False):
         self.token = token
         self.timeout = timeout
         self.proxies = proxies
         self.session = session
+        self.retry_rate_limit = retry_rate_limit
 
     def _request(self, method, api, **kwargs):
         if self.token:
@@ -64,6 +66,12 @@ class BaseAPI(object):
                           timeout=self.timeout,
                           proxies=self.proxies,
                           **kwargs)
+        if self.retry_rate_limit and response.status_code == 429:
+            time.sleep(int(response.headers['Retry-After']))
+            response = method(API_BASE_URL.format(api=api),
+                              timeout=self.timeout,
+                              proxies=self.proxies,
+                              **kwargs)
 
         response.raise_for_status()
 
@@ -908,7 +916,7 @@ class Slacker(object):
 
     def __init__(self, token, incoming_webhook_url=None,
                  timeout=DEFAULT_TIMEOUT, http_proxy=None, https_proxy=None,
-                 session=None):
+                 session=None, retry_rate_limit=False):
 
         proxies = self.__create_proxies(http_proxy, https_proxy)
         api_args = {
@@ -916,6 +924,7 @@ class Slacker(object):
             'timeout': timeout,
             'proxies': proxies,
             'session': session,
+            'retry_rate_limit': retry_rate_limit,
         }
         self.im = IM(**api_args)
         self.api = API(**api_args)
